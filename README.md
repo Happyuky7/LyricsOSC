@@ -229,3 +229,11 @@ Third-party components: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Lyrics
 [egui](https://github.com/emilk/egui), the Rust GUI library behind the app.
 
 [Axis](https://axis.void-space.com/), for the addon API.
+
+---
+
+<div align="center">
+
+**Happy coding!** 💚
+
+</div>
