@@ -199,9 +199,27 @@ Everything ends up in `app/dist/`. Pushing a tag like `v1.0.0` makes the [CI](.g
 
 [Axis](https://axis.void-space.com/), get Axis to use LyricsOSC as an addon.
 
-## Contributors
+## Contributors ✨
 
-- [**Happyuky7**](https://github.com/Happyuky7) - Main Developer and Maintainer.
+Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
+
+<!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
+<!-- prettier-ignore-start -->
+<!-- markdownlint-disable -->
+<table>
+  <tbody>
+    <tr>
+      <td align="center" valign="top" width="14.28%"><a href="https://happyuky7.com"><img src="https://avatars.githubusercontent.com/u/58347721?v=4?s=100" width="100px;" alt="Happyuky7"/><br /><sub><b>Happyuky7</b></sub></a><br /><a href="https://github.com/Happyuky7/LyricsOSC/commits?author=Happyuky7" title="Code">💻</a> <a href="#design-Happyuky7" title="Design">🎨</a> <a href="#maintenance-Happyuky7" title="Maintenance">🚧</a> <a href="#translation-Happyuky7" title="Translation">🌍</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- markdownlint-restore -->
+<!-- prettier-ignore-end -->
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
+
+This project follows the [all-contributors](https://github.com/all-contributors/all-contributors) specification. Contributions of any kind welcome!
 
 ## License
 
@@ -229,6 +247,16 @@ Third-party components: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Lyrics
 [egui](https://github.com/emilk/egui), the Rust GUI library behind the app.
 
 [Axis](https://axis.void-space.com/), for the addon API.
+
+## Star History
+
+<a href="https://www.star-history.com/#Happyuky7/LyricsOSC&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Happyuky7/LyricsOSC&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Happyuky7/LyricsOSC&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Happyuky7/LyricsOSC&type=Date" />
+  </picture>
+</a>
 
 ---
 
