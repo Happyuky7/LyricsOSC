@@ -1,0 +1,23 @@
+# app (Rust + Python)
+/app/target
+/app/dist
+/app/cache
+/app/models
+/app/tools/uv*
+/app/python/.venv
+/app/python/runtime
+/app/python/uv-cache
+/app/config.json
+/app/lyricsosc.log
+/app/LyricsOSC.exe
+__pycache__/
+
+
+# Third-party: Axis API library (belongs to the Axis developers, ships with Axis)
+AxisOpenApi.dll
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

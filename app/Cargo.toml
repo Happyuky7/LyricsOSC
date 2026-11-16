@@ -1,0 +1,36 @@
+[package]
+name = "lyricsosc"
+version = "1.0.0"
+edition = "2021"
+description = "Synced lyrics and live transcription for the VRChat chatbox (OSC)"
+license = "GPL-3.0-or-later"
+authors = ["Happyuky7 <https://happyuky7.com>", "LyricsOSC contributors"]
+homepage = "https://lyricsosc.happyuky7.com"
+repository = "https://github.com/Happyuky7/LyricsOSC"
+
+[dependencies]
+eframe = { version = "0.29", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
+ureq = { version = "2.10", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+regex = "1"
+urlencoding = "2"
+sys-locale = "0.3"
+png = "0.17"
+sysinfo = { version = "0.32", default-features = false, features = ["system"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = ["Media_Control", "Foundation", "Foundation_Collections", "Win32_System_WinRT", "Win32_System_Diagnostics_ToolHelp", "Win32_Foundation", "Win32_System_JobObjects", "Win32_Security", "Win32_System_Threading"] }
+wasapi = "0.27"
+libloading = "0.8"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = { version = "4", default-features = false, features = ["blocking", "async-io"] }
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
+[profile.release]
+opt-level = 3
+strip = true
+lto = "thin"

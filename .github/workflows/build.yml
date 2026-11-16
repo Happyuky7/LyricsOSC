@@ -1,0 +1,62 @@
+name: build
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --release
+      - name: Install Inno Setup and WiX
+        run: |
+          choco install innosetup -y --no-progress
+          # WiX 5 (free, MS-RL). WiX 7 requires accepting the paid OSMF EULA.
+          dotnet tool install -g wix --version 5.0.2
+          wix extension add -g WixToolset.UI.wixext/5.0.2 WixToolset.Util.wixext/5.0.2
+      - run: powershell -ExecutionPolicy Bypass -File scripts/build_release.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            app/dist/*.exe
+            app/dist/*.msi
+            app/dist/*.zip
+
+  linux:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libgl1-mesa-dev libwayland-dev
+      - run: cargo test --release
+      - run: bash ./scripts/build_linux.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: app/dist/*.tar.gz
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            windows/*
+            linux/*

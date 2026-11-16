@@ -1,0 +1,76 @@
+<!--
+  LyricsOSC — MSI installer (WiX Toolset v5)
+  Build (after scripts\build_release.ps1 created dist\windows):
+    dotnet tool install -g wix
+    wix extension add -g WixToolset.UI.wixext
+    wix build installer\wix\lyricsosc.wxs -ext WixToolset.UI.wixext -d Dist=dist\windows -d Version=1.0.0 -o dist\LyricsOSC-1.0.0.msi
+  The user chooses the folder (WixUI_InstallDir). At the end the voice engine is set up automatically.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="LyricsOSC" Manufacturer="Happyuky7" Version="$(var.Version)"
+           UpgradeCode="7B1D2E44-0C7A-4F3B-9C51-2E8D6A4B1F90" Scope="perUserOrMachine" Compressed="yes">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of LyricsOSC is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Icon Id="AppIcon" SourceFile="assets\icon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <WixVariable Id="WixUILicenseRtf" Value="installer\wix\license.rtf" />
+
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="LyricsOSC" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="MenuDir" Name="LyricsOSC" />
+    </StandardDirectory>
+
+    <!-- Every file in dist\windows -->
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <!-- App files only: the voice engine is downloaded at install time by setup_voice.ps1 -->
+      <Files Include="$(var.Dist)\**">
+        <Exclude Files="$(var.Dist)\python\.venv\**" />
+        <Exclude Files="$(var.Dist)\python\runtime\**" />
+        <Exclude Files="$(var.Dist)\python\uv-cache\**" />
+        <Exclude Files="$(var.Dist)\models\**" />
+        <Exclude Files="$(var.Dist)\tools\**" />
+        <Exclude Files="$(var.Dist)\cache\**" />
+        <Exclude Files="$(var.Dist)\config.json" />
+        <Exclude Files="$(var.Dist)\lyricsosc.log" />
+      </Files>
+    </ComponentGroup>
+
+    <Component Id="Shortcuts" Directory="MenuDir" Guid="2F6B0C51-6A1E-4D7E-8C33-91B2A7D5E0C4">
+      <Shortcut Id="AppShortcut" Name="LyricsOSC" Target="[INSTALLFOLDER]LyricsOSC.exe" WorkingDirectory="INSTALLFOLDER" />
+      <RemoveFolder Id="RemoveMenuDir" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\LyricsOSC" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <!-- Files created after install by setup_voice.ps1 -->
+    <Component Id="Cleanup" Directory="INSTALLFOLDER" Guid="9A4E7C21-3B5D-4F80-A6E2-5C1D8B3F7A09">
+      <RegistryValue Root="HKCU" Key="Software\LyricsOSC" Name="cleanup" Type="integer" Value="1" KeyPath="yes" />
+      <RemoveFile Id="RmCfg" Name="config.json" On="uninstall" />
+      <RemoveFile Id="RmLog" Name="lyricsosc.log" On="uninstall" />
+    </Component>
+
+    <Feature Id="Main" Title="LyricsOSC" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="Shortcuts" />
+      <ComponentRef Id="Cleanup" />
+    </Feature>
+
+    <!-- Automatic voice engine setup (Python + Whisper + CUDA if NVIDIA) -->
+    <SetProperty Id="SetupVoice" Before="SetupVoice" Sequence="execute"
+                 Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]scripts\setup_voice.ps1&quot; -InstallDir &quot;[INSTALLFOLDER]&quot;" />
+    <CustomAction Id="SetupVoice" BinaryRef="Wix4UtilCA_X64" DllEntry="WixQuietExec64"
+                  Execute="deferred" Impersonate="yes" Return="ignore" />
+    <!-- Remove downloaded Python/models on uninstall -->
+    <SetProperty Id="CleanVoice" Before="CleanVoice" Sequence="execute"
+                 Value="&quot;[System64Folder]cmd.exe&quot; /c rmdir /s /q &quot;[INSTALLFOLDER]python\.venv&quot; &amp; rmdir /s /q &quot;[INSTALLFOLDER]python\runtime&quot; &amp; rmdir /s /q &quot;[INSTALLFOLDER]python\uv-cache&quot; &amp; rmdir /s /q &quot;[INSTALLFOLDER]models&quot; &amp; rmdir /s /q &quot;[INSTALLFOLDER]tools&quot; &amp; rmdir /s /q &quot;[INSTALLFOLDER]cache&quot;" />
+    <CustomAction Id="CleanVoice" BinaryRef="Wix4UtilCA_X64" DllEntry="WixQuietExec64"
+                  Execute="deferred" Impersonate="yes" Return="ignore" />
+    <InstallExecuteSequence>
+      <Custom Action="SetupVoice" Before="InstallFinalize" Condition="NOT Installed AND NOT REMOVE" />
+      <Custom Action="CleanVoice" Before="RemoveFiles" Condition="REMOVE=&quot;ALL&quot;" />
+    </InstallExecuteSequence>
+
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+  </Package>
+</Wix>
