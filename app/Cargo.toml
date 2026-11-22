@@ -17,6 +17,10 @@ regex = "1"
 urlencoding = "2"
 sys-locale = "0.3"
 png = "0.17"
+kakasi = "0.1"
+pinyin = "0.11"
+sha2 = "0.10"
+whatlang = "0.16"
 sysinfo = { version = "0.32", default-features = false, features = ["system"] }
 
 [target.'cfg(windows)'.dependencies]
