@@ -46,6 +46,7 @@ It finds **synced lyrics online** ([LRCLIB](https://lrclib.net)). When a song ha
 
 - **Any player.** Spotify, YouTube, YouTube Music, Spotify Web and SoundCloud in any browser, plus any app that uses the system media controls (Windows SMTC, Linux MPRIS).
 - **Synced lyrics.** Time-synced lyrics from LRCLIB in Chinese, English, Spanish, Japanese, Korean and many more languages. YouTube titles like *"Artist - Song (Official Video) [4K]"* are cleaned up automatically. Lyrics are cached on disk, so each song is looked up only once.
+- **Romanization and translation.** See how a line is pronounced (Japanese romaji, Chinese pinyin, Korean, Russian/Ukrainian, offline) and/or a translation into your language under each line. Translation uses MyMemory (free, no key), DeepL or LibreTranslate, and is cached on disk so each song is translated only once.
 - **No lyrics? It listens.** The voice engine transcribes the song live and detects its language.
 - **Per-app audio, like OBS.** Transcribe only Chrome, only Spotify, an output device or a microphone. Works in incognito windows, and other apps don't interfere.
 - **GPU accelerated.** Pick your NVIDIA GPU, the Whisper model (tiny → large-v3) and the precision. It falls back to the CPU automatically.

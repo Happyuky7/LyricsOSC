@@ -43,6 +43,22 @@ pub struct Config {
     pub axis_enabled: bool,
     pub axis_dll: String,
 
+    // --- romanization & translation
+    /// Show the lyric in Latin letters (romaji, pinyin…)
+    pub romanize: bool,
+    /// "below" = extra line under the lyric | "replace" = instead of the lyric
+    pub romanize_mode: String,
+    pub translate: bool,
+    /// "auto" (interface language) or a UI language code
+    pub translate_to: String,
+    /// "mymemory" | "deepl" | "libretranslate"
+    pub translate_provider: String,
+    pub deepl_key: String,
+    pub libre_url: String,
+    pub libre_key: String,
+    /// Optional: raises MyMemory's free daily limit
+    pub mymemory_email: String,
+
     // --- voice (Python / faster-whisper)
     /// "default", "app:<exe>", "out:<name>", "in:<name>"
     pub audio_source: String,
@@ -80,6 +96,15 @@ impl Default for Config {
             paused_text: String::new(),
             axis_enabled: false,
             axis_dll: "AxisOpenApi.dll".into(),
+            romanize: false,
+            romanize_mode: "below".into(),
+            translate: false,
+            translate_to: "auto".into(),
+            translate_provider: "mymemory".into(),
+            deepl_key: String::new(),
+            libre_url: "https://libretranslate.com".into(),
+            libre_key: String::new(),
+            mymemory_email: String::new(),
             audio_source: "default".into(),
             python: default_python(),
             whisper_model: "small".into(),
