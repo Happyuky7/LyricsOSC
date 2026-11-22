@@ -73,6 +73,7 @@
   "update_check_on_start": "Kiểm tra cập nhật khi mở ứng dụng",
   "update_auto_download": "Tự động tải bản cập nhật (vẫn cần bấm để cài)",
   "update_bad_checksum": "tệp đã tải không khớp checksum của bản phát hành nên đã bị xoá",
+  "update_connecting": "Đang kết nối máy chủ tải xuống…",
   "src_default": "Đầu ra mặc định (toàn bộ PC)",
   "src_app": "Ứng dụng",
   "src_out": "Đầu ra",

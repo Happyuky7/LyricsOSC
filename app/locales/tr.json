@@ -73,6 +73,7 @@
   "update_check_on_start": "Uygulama açılırken güncellemeleri denetle",
   "update_auto_download": "Güncellemeleri otomatik indir (yükleme yine de tıklama gerektirir)",
   "update_bad_checksum": "indirilen dosya sürümün sağlama toplamıyla eşleşmediği için silindi",
+  "update_connecting": "İndirme sunucusuna bağlanılıyor…",
   "src_default": "Varsayılan çıkış (tüm PC)",
   "src_app": "Uygulama",
   "src_out": "Çıkış",

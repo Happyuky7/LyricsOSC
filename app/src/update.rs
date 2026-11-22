@@ -197,7 +197,12 @@ fn fetch(release: &Release, state: &Shared) -> Result<PathBuf, String> {
     // only the file name part, never a path from the server
     let safe_name: String = release.asset_name.chars().filter(|c| c.is_ascii_alphanumeric() || "-_.".contains(*c)).collect();
     let path = dir.join(if safe_name.is_empty() { "update.bin".into() } else { safe_name });
-    let resp = agent().get(&release.url).set("User-Agent", UA).call().map_err(|e| e.to_string())?;
+    // a stalled connection fails after 30 s without data instead of waiting forever
+    let resp = ureq::AgentBuilder::new()
+        .timeout_connect(std::time::Duration::from_secs(8))
+        .timeout_read(std::time::Duration::from_secs(30))
+        .build()
+        .get(&release.url).set("User-Agent", UA).call().map_err(|e| e.to_string())?;
     let total = resp.header("Content-Length").and_then(|v| v.parse().ok()).unwrap_or(release.size);
     let mut reader = resp.into_reader();
     let mut file = std::fs::File::create(&path).map_err(|e| e.to_string())?;

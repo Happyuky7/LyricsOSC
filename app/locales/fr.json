@@ -73,6 +73,7 @@
   "update_check_on_start": "Rechercher les mises à jour au démarrage",
   "update_auto_download": "Télécharger les mises à jour automatiquement (l’installation demande toujours un clic)",
   "update_bad_checksum": "le fichier téléchargé ne correspond pas à la somme de contrôle de la version, il a été supprimé",
+  "update_connecting": "Connexion au serveur de téléchargement…",
   "src_default": "Sortie par défaut (tout le PC)",
   "src_app": "App",
   "src_out": "Sortie",

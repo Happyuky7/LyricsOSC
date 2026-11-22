@@ -73,6 +73,7 @@
   "update_check_on_start": "起動時にアップデートを確認",
   "update_auto_download": "アップデートを自動でダウンロード（インストールにはクリックが必要）",
   "update_bad_checksum": "ダウンロードしたファイルがリリースのチェックサムと一致しないため削除しました",
+  "update_connecting": "ダウンロードサーバーに接続中…",
   "src_default": "既定の出力（PC 全体）",
   "src_app": "アプリ",
   "src_out": "出力",

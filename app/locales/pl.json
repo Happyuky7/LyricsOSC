@@ -73,6 +73,7 @@
   "update_check_on_start": "Sprawdzaj aktualizacje przy uruchomieniu",
   "update_auto_download": "Pobieraj aktualizacje automatycznie (instalacja nadal wymaga kliknięcia)",
   "update_bad_checksum": "pobrany plik nie zgadza się z sumą kontrolną wydania, więc został usunięty",
+  "update_connecting": "Łączenie z serwerem pobierania…",
   "src_default": "Domyślne wyjście (cały PC)",
   "src_app": "Aplikacja",
   "src_out": "Wyjście",

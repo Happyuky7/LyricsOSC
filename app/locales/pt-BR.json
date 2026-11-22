@@ -73,6 +73,7 @@
   "update_check_on_start": "Verificar atualizações ao abrir o app",
   "update_auto_download": "Baixar atualizações automaticamente (instalar ainda exige um clique)",
   "update_bad_checksum": "o arquivo baixado não confere com o checksum do release e foi apagado",
+  "update_connecting": "Conectando ao servidor de download…",
   "src_default": "Saída padrão (PC inteiro)",
   "src_app": "App",
   "src_out": "Saída",

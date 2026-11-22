@@ -73,6 +73,7 @@
   "update_check_on_start": "Check for updates when the app starts",
   "update_auto_download": "Download updates automatically (installing still needs a click)",
   "update_bad_checksum": "the downloaded file doesn't match the release checksum, so it was deleted",
+  "update_connecting": "Connecting to the download server…",
   "src_default": "Default output (whole PC)",
   "src_app": "App",
   "src_out": "Output",

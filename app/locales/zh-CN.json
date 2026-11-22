@@ -73,6 +73,7 @@
   "update_check_on_start": "启动时检查更新",
   "update_auto_download": "自动下载更新（安装仍需点击确认）",
   "update_bad_checksum": "下载的文件与发布版本的校验和不一致，已删除",
+  "update_connecting": "正在连接下载服务器…",
   "src_default": "默认输出（整个电脑）",
   "src_app": "应用",
   "src_out": "输出",

@@ -73,6 +73,7 @@
   "update_check_on_start": "Periksa pembaruan saat aplikasi dibuka",
   "update_auto_download": "Unduh pembaruan otomatis (pemasangan tetap perlu diklik)",
   "update_bad_checksum": "file yang diunduh tidak cocok dengan checksum rilis sehingga dihapus",
+  "update_connecting": "Menghubungkan ke server unduhan…",
   "src_default": "Output default (seluruh PC)",
   "src_app": "Aplikasi",
   "src_out": "Output",

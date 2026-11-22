@@ -73,6 +73,7 @@
   "update_check_on_start": "앱 시작 시 업데이트 확인",
   "update_auto_download": "업데이트 자동 다운로드 (설치는 클릭이 필요)",
   "update_bad_checksum": "다운로드한 파일이 릴리스 체크섬과 일치하지 않아 삭제했습니다",
+  "update_connecting": "다운로드 서버에 연결 중…",
   "src_default": "기본 출력 (PC 전체)",
   "src_app": "앱",
   "src_out": "출력",

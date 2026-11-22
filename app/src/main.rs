@@ -538,6 +538,11 @@ impl Gui {
                     ui.hyperlink_to(t("update_whats_new"), &r.notes_url);
                 });
             }
+            // no bytes yet: GitHub can take a few seconds to start sending, so say so
+            // instead of showing a progress bar stuck at 0 %
+            update::Status::Downloading { done: 0, .. } => {
+                ui.label(egui::RichText::new(t("update_connecting")).weak());
+            }
             update::Status::Downloading { done, total, .. } => {
                 let frac = if *total > 0 { *done as f32 / *total as f32 } else { 0.0 };
                 ui.add(egui::ProgressBar::new(frac).show_percentage().desired_width(360.0).fill(ACCENT.gamma_multiply(0.8)));

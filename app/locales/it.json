@@ -73,6 +73,7 @@
   "update_check_on_start": "Cerca aggiornamenti all’avvio",
   "update_auto_download": "Scarica gli aggiornamenti automaticamente (l’installazione richiede comunque un clic)",
   "update_bad_checksum": "il file scaricato non corrisponde al checksum della release ed è stato eliminato",
+  "update_connecting": "Connessione al server di download…",
   "src_default": "Uscita predefinita (tutto il PC)",
   "src_app": "App",
   "src_out": "Uscita",

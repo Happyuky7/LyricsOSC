@@ -73,6 +73,7 @@
   "update_check_on_start": "Tingnan ang mga update pagbukas ng app",
   "update_auto_download": "Awtomatikong i-download ang mga update (kailangan pa ring i-click para i-install)",
   "update_bad_checksum": "hindi tugma ang na-download na file sa checksum ng release kaya ito ay binura",
+  "update_connecting": "Kumokonekta sa download server…",
   "src_default": "Default na output (buong PC)",
   "src_app": "App",
   "src_out": "Output",
