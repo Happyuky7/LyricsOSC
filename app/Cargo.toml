@@ -1,6 +1,6 @@
 [package]
 name = "lyricsosc"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 description = "Synced lyrics and live transcription for the VRChat chatbox (OSC)"
 license = "GPL-3.0-or-later"

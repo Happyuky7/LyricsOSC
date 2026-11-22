@@ -8,7 +8,7 @@
 
 Synced lyrics and live AI transcription for whatever you're listening to — Spotify, YouTube or any player.
 
-[![Version](https://img.shields.io/badge/version-1.0.0-ff5c8a.svg)](https://github.com/Happyuky7/LyricsOSC/releases)
+[![Version](https://img.shields.io/badge/version-1.1.0-ff5c8a.svg)](https://github.com/Happyuky7/LyricsOSC/releases)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-ff5c8a.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-b04ce0.svg)](#download)
 [![Rust](https://img.shields.io/badge/Rust-egui-orange?logo=rust)](https://www.rust-lang.org)
@@ -184,7 +184,7 @@ powershell -ExecutionPolicy Bypass -File scripts/build_release.ps1
 ./scripts/build_linux_docker.sh
 ```
 
-Everything ends up in `app/dist/`. Pushing a tag like `v1.0.0` makes the [CI](.github/workflows/build.yml) build all packages and publish a GitHub release.
+Everything ends up in `app/dist/`. Pushing a tag like `v1.1.0` makes the [CI](.github/workflows/build.yml) build all packages and publish a GitHub release.
 
 ## Contributing
 

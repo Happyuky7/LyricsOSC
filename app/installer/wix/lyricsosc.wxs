@@ -3,7 +3,8 @@
   Build (after scripts\build_release.ps1 created dist\windows):
     dotnet tool install -g wix
     wix extension add -g WixToolset.UI.wixext
-    wix build installer\wix\lyricsosc.wxs -ext WixToolset.UI.wixext -d Dist=dist\windows -d Version=1.0.0 -o dist\LyricsOSC-1.0.0.msi
+    (run by scripts\build_release.ps1)
+    wix build installer\wix\lyricsosc.wxs -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext -bindpath app=<app files folder> -d Version=1.1.0 -o dist\LyricsOSC-1.1.0.msi
   The user chooses the folder (WixUI_InstallDir). At the end the voice engine is set up automatically.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
@@ -24,17 +25,9 @@
 
     <!-- Every file in dist\windows -->
     <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
-      <!-- App files only: the voice engine is downloaded at install time by setup_voice.ps1 -->
-      <Files Include="$(var.Dist)\**">
-        <Exclude Files="$(var.Dist)\python\.venv\**" />
-        <Exclude Files="$(var.Dist)\python\runtime\**" />
-        <Exclude Files="$(var.Dist)\python\uv-cache\**" />
-        <Exclude Files="$(var.Dist)\models\**" />
-        <Exclude Files="$(var.Dist)\tools\**" />
-        <Exclude Files="$(var.Dist)\cache\**" />
-        <Exclude Files="$(var.Dist)\config.json" />
-        <Exclude Files="$(var.Dist)\lyricsosc.log" />
-      </Files>
+      <!-- App files only (the staged folder build_release.ps1 also zips): the voice engine
+           is downloaded at install time by setup_voice.ps1 -->
+      <Files Include="!(bindpath.app)\**" />
     </ComponentGroup>
 
     <Component Id="Shortcuts" Directory="MenuDir" Guid="2F6B0C51-6A1E-4D7E-8C33-91B2A7D5E0C4">
