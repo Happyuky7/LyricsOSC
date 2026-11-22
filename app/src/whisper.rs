@@ -155,6 +155,8 @@ pub struct Transcriber {
     /// Settings the process was started with (restart if they change)
     pub signature: String,
     log: Sender<String>,
+    /// Last lines Python wrote to stderr: logged if it exits, to show why
+    stderr_tail: Arc<Mutex<std::collections::VecDeque<String>>>,
 }
 
 pub fn signature(cfg: &Config) -> String {
@@ -173,9 +175,23 @@ impl Transcriber {
         if cfg.vad {
             cmd.arg("--vad");
         }
-        let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
+        let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
             .spawn().map_err(|e| format!("Python: {e}"))?;
         kill_with_parent(&child);
+
+        // keep draining stderr (a full pipe would block Python) and remember the last lines
+        let stderr_tail = Arc::new(Mutex::new(std::collections::VecDeque::new()));
+        let (stderr, tail) = (child.stderr.take().unwrap(), stderr_tail.clone());
+        std::thread::spawn(move || {
+            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                // progress bars redraw with \r: keep only the last state
+                let line = line.rsplit('\r').next().unwrap_or("").trim_end();
+                if line.is_empty() { continue; }
+                let mut t = tail.lock().unwrap();
+                if t.len() == 15 { t.pop_front(); }
+                t.push_back(line.chars().take(300).collect());
+            }
+        });
 
         let stdout = child.stdout.take().unwrap();
         let stdin = Arc::new(Mutex::new(child.stdin.take().unwrap()));
@@ -195,7 +211,7 @@ impl Transcriber {
         });
         let _ = log.send(format!("[voice] loading Whisper {}…", cfg.whisper_model));
         Ok(Self { child, stdin, capture_stop: Arc::new(AtomicBool::new(true)), source: String::new(),
-                  signature: signature(cfg), log })
+                  signature: signature(cfg), log, stderr_tail })
     }
 
     pub fn pid(&self) -> u32 {
@@ -242,6 +258,19 @@ impl Transcriber {
         matches!(self.child.try_wait(), Ok(None))
     }
 
+    /// Last lines Python wrote to stderr (the traceback, if it crashed).
+    pub fn stderr_tail(&self) -> Vec<String> {
+        self.stderr_tail.lock().map(|t| t.iter().cloned().collect()).unwrap_or_default()
+    }
+
+    /// `Some(code)` once the process has exited.
+    pub fn exit_code(&mut self) -> Option<String> {
+        match self.child.try_wait() {
+            Ok(Some(st)) => Some(st.code().map_or("?".into(), |c| c.to_string())),
+            _ => None,
+        }
+    }
+
     /// New song: let Python detect the language again.
     pub fn reset_language(&self) {
         if let Ok(mut w) = self.stdin.lock() {
@@ -254,5 +283,27 @@ impl Drop for Transcriber {
     fn drop(&mut self) {
         self.capture_stop.store(true, Ordering::Relaxed);
         let _ = self.child.kill();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Python that dies at once (the sidecar script is missing next to the test binary):
+    /// the exit code and its error message must be reported.
+    #[test]
+    #[ignore]
+    fn crash_is_reported() {
+        let mut cfg = Config::default();
+        cfg.python = std::env::var("TEST_PYTHON").unwrap_or("python".into());
+        let (tx, _rx) = channel();
+        let (log, _log_rx) = channel();
+        let mut t = Transcriber::start(&cfg, tx, log).expect("start");
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        let code = t.exit_code().expect("should have exited");
+        let tail = t.stderr_tail();
+        println!("exit {code}: {tail:?}");
+        assert!(tail.iter().any(|l| l.contains("whisper_sidecar.py")));
     }
 }

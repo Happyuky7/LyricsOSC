@@ -9,6 +9,7 @@ mod engine;
 mod i18n;
 mod lyrics;
 mod media;
+mod gpu_proc;
 mod monitor;
 mod osc;
 mod romanize;
@@ -686,20 +687,26 @@ fn bar(ui: &mut egui::Ui, label: &str, frac: f32, text: String) {
     });
 }
 
+/// GPU % and VRAM used by one process (LyricsOSC or the voice engine).
+fn proc_gpu(ui: &mut egui::Ui, g: Option<gpu_proc::ProcGpu>, vram_total: Option<f64>) {
+    let Some(g) = g else { return };
+    bar(ui, &t("gpu_use"), g.util / 100.0, format!("{:.1}%", g.util));
+    let tot = vram_total.unwrap_or(8192.0);
+    bar(ui, &t("vram"), (g.vram_mb / tot) as f32, mb(g.vram_mb));
+}
+
 fn tab_monitor(ui: &mut egui::Ui, u: &monitor::Usage, voice_running: bool, gpus: &[whisper::Gpu], gpu_index: u32) {
     let total_ram = 16.0 * 1024.0; // scale only; the text shows the real value
     ui.heading("LyricsOSC");
     bar(ui, &t("cpu"), u.app_cpu / 100.0, format!("{:.1}%", u.app_cpu));
     bar(ui, &t("ram"), (u.app_ram_mb / 1024.0) as f32, mb(u.app_ram_mb));
+    proc_gpu(ui, u.app_gpu, u.gpu_vram_total_mb);
     ui.add_space(8.0);
     ui.heading(t("voice_engine"));
     if voice_running {
         bar(ui, &t("cpu"), u.voice_cpu / 100.0, format!("{:.1}%", u.voice_cpu));
         bar(ui, &t("ram"), (u.voice_ram_mb / total_ram) as f32 * 4.0, mb(u.voice_ram_mb));
-        if u.voice_vram_mb > 0.0 {
-            let tot = u.gpu_vram_total_mb.unwrap_or(8192.0);
-            bar(ui, &t("vram"), (u.voice_vram_mb / tot) as f32, mb(u.voice_vram_mb));
-        }
+        proc_gpu(ui, u.voice_gpu, u.gpu_vram_total_mb);
     } else {
         ui.label(egui::RichText::new(t("not_running")).weak());
     }
@@ -711,7 +718,13 @@ fn tab_monitor(ui: &mut egui::Ui, u: &monitor::Usage, voice_running: bool, gpus:
         bar(ui, &t("vram"), (used / tot) as f32, format!("{} / {}", mb(used), mb(tot)));
     }
     ui.add_space(8.0);
-    ui.label(egui::RichText::new(format!("Total: CPU {:.1}% · RAM {}", u.app_cpu + u.voice_cpu, mb(u.app_ram_mb + u.voice_ram_mb))).strong());
+    let mut total = format!("Total: CPU {:.1}% · RAM {}", u.app_cpu + u.voice_cpu, mb(u.app_ram_mb + u.voice_ram_mb));
+    if u.app_gpu.is_some() || u.voice_gpu.is_some() {
+        let g = [u.app_gpu, u.voice_gpu].into_iter().flatten()
+            .fold((0.0f32, 0.0f64), |a, g| (a.0 + g.util, a.1 + g.vram_mb));
+        total += &format!(" · GPU {:.1}% · VRAM {}", g.0.min(100.0), mb(g.1));
+    }
+    ui.label(egui::RichText::new(total).strong());
 }
 
 /// Tab shown at startup. `LYRICSOSC_TAB=about|voice|chatbox|translate|monitor|log` overrides it (handy for testing).

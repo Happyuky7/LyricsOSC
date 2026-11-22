@@ -4,7 +4,7 @@
     dotnet tool install -g wix
     wix extension add -g WixToolset.UI.wixext
     (run by scripts\build_release.ps1)
-    wix build installer\wix\lyricsosc.wxs -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext -bindpath app=<app files folder> -d Version=1.1.0 -o dist\LyricsOSC-1.1.0.msi
+    wix build installer\wix\lyricsosc.wxs -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext -bindpath app=<app files folder> -d Version=1.1.1 -o dist\LyricsOSC-1.1.1.msi
   The user chooses the folder (WixUI_InstallDir). At the end the voice engine is set up automatically.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
@@ -49,9 +49,10 @@
       <ComponentRef Id="Cleanup" />
     </Feature>
 
-    <!-- Automatic voice engine setup (Python + Whisper + CUDA if NVIDIA) -->
+    <!-- Automatic voice engine setup (Python + Whisper + CUDA if NVIDIA).
+         INSTALLFOLDER ends with "\": passed as "[INSTALLFOLDER]." so the \" does not escape the quote -->
     <SetProperty Id="SetupVoice" Before="SetupVoice" Sequence="execute"
-                 Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]scripts\setup_voice.ps1&quot; -InstallDir &quot;[INSTALLFOLDER]&quot;" />
+                 Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]scripts\setup_voice.ps1&quot; -InstallDir &quot;[INSTALLFOLDER].&quot;" />
     <CustomAction Id="SetupVoice" BinaryRef="Wix4UtilCA_X64" DllEntry="WixQuietExec64"
                   Execute="deferred" Impersonate="yes" Return="ignore" />
     <!-- Remove downloaded Python/models on uninstall -->

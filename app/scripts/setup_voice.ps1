@@ -6,6 +6,8 @@ param(
     [string]$Model = "small",
     [switch]$NoGpu
 )
+# A path ending in \ before the closing quote arrives with a stray quote (\" is an escape)
+$InstallDir = [IO.Path]::GetFullPath($InstallDir.Trim().Trim('"'))
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 [Console]::OutputEncoding = [Text.Encoding]::UTF8

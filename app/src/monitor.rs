@@ -1,4 +1,4 @@
-//! Resource monitor: CPU / RAM of LyricsOSC + its voice process, and GPU VRAM.
+//! Resource monitor: CPU / RAM / GPU of LyricsOSC and its voice process, plus whole-GPU totals.
 use std::process::Command;
 use std::time::{Duration, Instant};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
@@ -9,7 +9,9 @@ pub struct Usage {
     pub app_ram_mb: f64,
     pub voice_cpu: f32,
     pub voice_ram_mb: f64,
-    pub voice_vram_mb: f64,
+    /// Per-process GPU (None = not available on this system)
+    pub app_gpu: Option<crate::gpu_proc::ProcGpu>,
+    pub voice_gpu: Option<crate::gpu_proc::ProcGpu>,
     pub gpu_util: Option<f32>,
     pub gpu_vram_used_mb: Option<f64>,
     pub gpu_vram_total_mb: Option<f64>,
@@ -18,11 +20,14 @@ pub struct Usage {
 pub struct Monitor {
     sys: System,
     last_gpu: Instant,
-    gpu: (Option<f32>, Option<f64>, Option<f64>, Vec<(u32, f64)>),
+    gpu: (Option<f32>, Option<f64>, Option<f64>),
     cpus: f32,
+    procs: Option<crate::gpu_proc::GpuProcs>,
+    last_procs: Instant,
+    proc_gpu: std::collections::HashMap<u32, crate::gpu_proc::ProcGpu>,
 }
 
-fn smi(args: &[&str]) -> String {
+pub(crate) fn smi(args: &[&str]) -> String {
     let mut c = Command::new("nvidia-smi");
     c.args(args);
     #[cfg(windows)]
@@ -36,7 +41,8 @@ fn smi(args: &[&str]) -> String {
 impl Monitor {
     pub fn new() -> Self {
         let cpus = std::thread::available_parallelism().map(|n| n.get() as f32).unwrap_or(1.0);
-        Self { sys: System::new(), last_gpu: Instant::now() - Duration::from_secs(60), gpu: (None, None, None, vec![]), cpus }
+        Self { sys: System::new(), last_gpu: Instant::now() - Duration::from_secs(60), gpu: (None, None, None), cpus,
+               procs: crate::gpu_proc::GpuProcs::new(), last_procs: Instant::now(), proc_gpu: Default::default() }
     }
 
     /// Call ~once per second. `voice_pid` = Python process, if running.
@@ -71,17 +77,25 @@ impl Monitor {
             let id = format!("--id={gpu_index}");
             let line = smi(&[&id, "--query-gpu=utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"]);
             let p: Vec<f64> = line.trim().split(',').filter_map(|x| x.trim().parse().ok()).collect();
-            let apps = smi(&[&id, "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"]);
-            let apps: Vec<(u32, f64)> = apps.lines().filter_map(|l| {
-                let mut it = l.split(',').map(str::trim);
-                Some((it.next()?.parse().ok()?, it.next()?.parse().ok()?))
-            }).collect();
-            self.gpu = (p.first().map(|x| *x as f32), p.get(1).copied(), p.get(2).copied(), apps);
+            self.gpu = (p.first().map(|x| *x as f32), p.get(1).copied(), p.get(2).copied());
         }
         u.gpu_util = self.gpu.0;
         u.gpu_vram_used_mb = self.gpu.1;
         u.gpu_vram_total_mb = self.gpu.2;
-        u.voice_vram_mb = self.gpu.3.iter().filter(|(pid, _)| voice_pids.contains(pid)).map(|(_, m)| m).sum();
+        // per-process GPU every 2 s
+        if let Some(g) = self.procs.as_mut() {
+            if self.last_procs.elapsed() >= Duration::from_secs(2) {
+                self.last_procs = Instant::now();
+                self.proc_gpu = g.sample();
+            }
+            let sum = |pids: &[u32]| pids.iter().filter_map(|p| self.proc_gpu.get(p)).fold(
+                crate::gpu_proc::ProcGpu::default(),
+                |a, b| crate::gpu_proc::ProcGpu { util: (a.util + b.util).min(100.0), vram_mb: a.vram_mb + b.vram_mb });
+            u.app_gpu = Some(sum(&[std::process::id()]));
+            if !voice_pids.is_empty() {
+                u.voice_gpu = Some(sum(&voice_pids));
+            }
+        }
         u
     }
 }

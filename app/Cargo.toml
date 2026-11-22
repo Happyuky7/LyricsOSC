@@ -1,6 +1,6 @@
 [package]
 name = "lyricsosc"
-version = "1.1.0"
+version = "1.1.1"
 edition = "2021"
 description = "Synced lyrics and live transcription for the VRChat chatbox (OSC)"
 license = "GPL-3.0-or-later"
@@ -24,7 +24,7 @@ whatlang = "0.16"
 sysinfo = { version = "0.32", default-features = false, features = ["system"] }
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.58", features = ["Media_Control", "Foundation", "Foundation_Collections", "Win32_System_WinRT", "Win32_System_Diagnostics_ToolHelp", "Win32_Foundation", "Win32_System_JobObjects", "Win32_Security", "Win32_System_Threading"] }
+windows = { version = "0.58", features = ["Media_Control", "Foundation", "Foundation_Collections", "Win32_System_WinRT", "Win32_System_Diagnostics_ToolHelp", "Win32_Foundation", "Win32_System_JobObjects", "Win32_Security", "Win32_System_Threading", "Win32_System_Performance"] }
 wasapi = "0.27"
 libloading = "0.8"
 

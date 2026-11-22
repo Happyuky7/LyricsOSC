@@ -488,7 +488,17 @@ fn run(state: State) {
         // ---- resource monitor (1 Hz)
         let usage = if last_monitor.elapsed() >= Duration::from_secs(1) {
             last_monitor = Instant::now();
-            let vp = transcriber.as_mut().and_then(|t| if t.alive() { Some(t.pid()) } else { None });
+            // the Python process can exit on its own (crash, out of memory…): drop it so it is
+            // shown as stopped and started again the next time voice is needed
+            if let Some(t) = transcriber.as_mut() {
+                if let Some(code) = t.exit_code() {
+                    std::thread::sleep(Duration::from_millis(100)); // let the stderr reader catch up
+                    log(format!("[voice] engine stopped (exit code {code})"));
+                    for l in t.stderr_tail() { log(format!("[voice] | {l}")); }
+                    transcriber = None;
+                }
+            }
+            let vp = transcriber.as_ref().map(|t| t.pid());
             Some(monitor.sample(vp, cfg.gpu_index))
         } else { None };
 
