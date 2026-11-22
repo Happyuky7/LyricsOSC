@@ -11,12 +11,14 @@ mod lyrics;
 mod media;
 mod monitor;
 mod osc;
+mod romanize;
+mod translate;
 mod update;
 mod whisper;
 
 use config::{Config, Mode};
 use eframe::egui;
-use engine::{LyricStatus, Shared, State};
+use engine::{LyricStatus, Shared, State, TranslateStatus};
 use i18n::t;
 use std::sync::{Arc, Mutex};
 
@@ -60,7 +62,7 @@ fn load_png(path: &std::path::Path) -> Option<(Vec<u8>, u32, u32)> {
 }
 
 #[derive(PartialEq, Clone, Copy)]
-enum Tab { Main, Chatbox, Voice, Monitor, Log, About }
+enum Tab { Main, Chatbox, Translate, Voice, Monitor, Log, About }
 
 struct Gui {
     state: State,
@@ -151,10 +153,11 @@ fn mb(x: f64) -> String {
 impl eframe::App for Gui {
     fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         ctx.request_repaint_after(std::time::Duration::from_millis(200));
-        let (sessions, audio_opts, gpus, track, pos, status, chatbox, logs, paused, usage, voice_running, py_ready) = {
+        let (sessions, audio_opts, gpus, track, pos, status, chatbox, logs, paused, usage, voice_running, py_ready, tr_status) = {
             let g = self.state.lock().unwrap();
             (g.sessions.clone(), g.audio_options.clone(), g.gpus.clone(), g.track.clone(), g.position,
-             g.lyric_status, g.chatbox.clone(), g.logs.clone(), g.paused, g.usage.clone(), g.voice_running, g.python_ready)
+             g.lyric_status, g.chatbox.clone(), g.logs.clone(), g.paused, g.usage.clone(), g.voice_running, g.python_ready,
+             g.translate_status.clone())
         };
         let before = serde_json::to_string(&self.cfg).unwrap_or_default();
 
@@ -197,7 +200,8 @@ impl eframe::App for Gui {
             });
             ui.add_space(2.0);
             ui.horizontal(|ui| {
-                for (tab, key) in [(Tab::Main, "tab_main"), (Tab::Chatbox, "tab_chatbox"), (Tab::Voice, "tab_voice"),
+                for (tab, key) in [(Tab::Main, "tab_main"), (Tab::Chatbox, "tab_chatbox"), (Tab::Translate, "tab_translate"),
+                                   (Tab::Voice, "tab_voice"),
                                    (Tab::Monitor, "tab_monitor"), (Tab::Log, "tab_log"), (Tab::About, "tab_about")] {
                     let has_update = tab == Tab::About && matches!(*self.update.lock().unwrap(), update::Status::Available(_) | update::Status::Ready { .. });
                     let label = if has_update { format!("{} ●", t(key)) } else { t(key) };
@@ -247,6 +251,7 @@ impl eframe::App for Gui {
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| match self.tab {
                 Tab::Main => self.tab_main(ui, &sessions, &audio_opts),
                 Tab::Chatbox => self.tab_chatbox(ui),
+                Tab::Translate => self.tab_translate(ui, &tr_status),
                 Tab::Voice => self.tab_voice(ui, &gpus, py_ready),
                 Tab::Monitor => tab_monitor(ui, &usage, voice_running, &gpus, self.cfg.gpu_index),
                 Tab::Log => {
@@ -371,6 +376,107 @@ impl Gui {
             ui.label(t("get_axis"));
             ui.hyperlink_to("axis.void-space.com", update::AXIS_SITE);
         });
+    }
+
+    fn tab_translate(&mut self, ui: &mut egui::Ui, status: &TranslateStatus) {
+        // ---- romanization
+        ui.heading(t("romanize_head"));
+        ui.checkbox(&mut self.cfg.romanize, t("romanize_enable"));
+        ui.add_enabled_ui(self.cfg.romanize, |ui| {
+            ui.horizontal(|ui| {
+                ui.radio_value(&mut self.cfg.romanize_mode, "below".to_string(), t("romanize_below"));
+                ui.radio_value(&mut self.cfg.romanize_mode, "replace".to_string(), t("romanize_replace"));
+            });
+        });
+        ui.label(egui::RichText::new(t("romanize_hint")).small().weak());
+
+        // ---- translation
+        ui.add_space(12.0);
+        ui.separator();
+        ui.heading(t("translate_head"));
+        ui.checkbox(&mut self.cfg.translate, t("translate_enable"));
+        ui.add_enabled_ui(self.cfg.translate, |ui| {
+            egui::Grid::new("translate").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
+                ui.label(t("translate_to"));
+                let langs = i18n::languages();
+                let sel = if self.cfg.translate_to == "auto" { t("translate_auto") } else {
+                    langs.iter().find(|(c, _)| *c == self.cfg.translate_to).map(|x| x.1.clone()).unwrap_or(self.cfg.translate_to.clone())
+                };
+                egui::ComboBox::from_id_salt("tr_to").width(260.0).selected_text(sel).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.cfg.translate_to, "auto".to_string(), t("translate_auto"));
+                    for (code, name) in &langs {
+                        ui.selectable_value(&mut self.cfg.translate_to, code.to_string(), name);
+                    }
+                });
+                ui.end_row();
+
+                ui.label(t("provider"));
+                let name = |p: &str| match p { "deepl" => t("provider_deepl"), "libretranslate" => t("provider_libre"), _ => t("provider_mymemory") };
+                egui::ComboBox::from_id_salt("tr_provider").width(260.0).selected_text(name(&self.cfg.translate_provider)).show_ui(ui, |ui| {
+                    for p in ["mymemory", "deepl", "libretranslate"] {
+                        ui.selectable_value(&mut self.cfg.translate_provider, p.to_string(), name(p));
+                    }
+                });
+                ui.end_row();
+
+                match self.cfg.translate_provider.as_str() {
+                    "deepl" => {
+                        ui.label(t("deepl_key"));
+                        ui.add(egui::TextEdit::singleline(&mut self.cfg.deepl_key).password(true).desired_width(260.0));
+                        ui.end_row();
+                        ui.label("");
+                        ui.label(egui::RichText::new(t("deepl_hint")).small().weak());
+                        ui.end_row();
+                    }
+                    "libretranslate" => {
+                        ui.label(t("libre_url"));
+                        ui.add(egui::TextEdit::singleline(&mut self.cfg.libre_url).desired_width(260.0));
+                        ui.end_row();
+                        ui.label(t("libre_key"));
+                        ui.add(egui::TextEdit::singleline(&mut self.cfg.libre_key).password(true).desired_width(260.0));
+                        ui.end_row();
+                        ui.label("");
+                        ui.label(egui::RichText::new(t("libre_hint")).small().weak());
+                        ui.end_row();
+                    }
+                    _ => {
+                        ui.label(t("mymemory_email"));
+                        ui.add(egui::TextEdit::singleline(&mut self.cfg.mymemory_email).desired_width(260.0));
+                        ui.end_row();
+                        ui.label("");
+                        ui.label(egui::RichText::new(t("mymemory_hint")).small().weak());
+                        ui.end_row();
+                    }
+                }
+            });
+        });
+        ui.label(egui::RichText::new(t("translate_hint")).small().weak());
+
+        // ---- status (fed by the engine)
+        if self.cfg.translate {
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.label(format!("{}:", t("tr_status")));
+                let ok = egui::Color32::from_rgb(120, 220, 140);
+                let warn = egui::Color32::from_rgb(255, 190, 90);
+                let err = egui::Color32::from_rgb(255, 140, 140);
+                match status {
+                    TranslateStatus::Idle => { ui.label(egui::RichText::new("—").weak()); }
+                    TranslateStatus::Working => { ui.spinner(); ui.label(t("tr_working")); }
+                    TranslateStatus::Done => { ui.colored_label(ok, t("tr_done")); }
+                    TranslateStatus::Same => { ui.colored_label(ok, t("tr_same")); }
+                    TranslateStatus::Error(e) => {
+                        let msg = match e {
+                            translate::Error::Quota => t("tr_quota"),
+                            translate::Error::Unsupported => t("tr_unsupported"),
+                            translate::Error::NoKey => t("tr_no_key"),
+                            translate::Error::Other(m) => format!("{}: {m}", t("tr_error")),
+                        };
+                        ui.colored_label(if matches!(e, translate::Error::Other(_)) { err } else { warn }, msg);
+                    }
+                }
+            });
+        }
     }
 
     fn tab_about(&mut self, ui: &mut egui::Ui) {
@@ -608,10 +714,11 @@ fn tab_monitor(ui: &mut egui::Ui, u: &monitor::Usage, voice_running: bool, gpus:
     ui.label(egui::RichText::new(format!("Total: CPU {:.1}% · RAM {}", u.app_cpu + u.voice_cpu, mb(u.app_ram_mb + u.voice_ram_mb))).strong());
 }
 
-/// Tab shown at startup. `LYRICSOSC_TAB=about|voice|chatbox|monitor|log` overrides it (handy for testing).
+/// Tab shown at startup. `LYRICSOSC_TAB=about|voice|chatbox|translate|monitor|log` overrides it (handy for testing).
 fn start_tab() -> Tab {
     match std::env::var("LYRICSOSC_TAB").unwrap_or_default().to_lowercase().as_str() {
         "chatbox" => Tab::Chatbox,
+        "translate" => Tab::Translate,
         "voice" => Tab::Voice,
         "monitor" => Tab::Monitor,
         "log" => Tab::Log,

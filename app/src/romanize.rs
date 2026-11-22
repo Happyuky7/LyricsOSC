@@ -112,7 +112,7 @@ fn korean(line: &str) -> String {
         // initial ㄹ at the start of a word reads as "r"; ㅇ initial is silent
         out.push_str(L[l]);
         out.push_str(V[v]);
-        let next_silent = chars.get(i + 1).map_or(false, |&n| {
+        let next_silent = chars.get(i + 1).is_some_and(|&n| {
             let n = n as u32;
             (0xAC00..=0xD7A3).contains(&n) && (n - 0xAC00) / 588 == 11
         });

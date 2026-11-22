@@ -6,6 +6,8 @@ use crate::lyrics::{self, Lyrics};
 use crate::media::{self, Media, Track};
 use crate::monitor::{Monitor, Usage};
 use crate::osc::{truncate_chars, VrcChatbox};
+use crate::romanize;
+use crate::translate::{self, Translations};
 use crate::whisper::{self, Gpu, Transcriber};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -19,6 +21,18 @@ pub enum LyricStatus {
     Synced,
     Plain,
     None,
+}
+
+/// Translation state shown in the Translation tab.
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
+pub enum TranslateStatus {
+    #[default]
+    Idle,
+    Working,
+    Done,
+    /// The song is already in the target language
+    Same,
+    Error(translate::Error),
 }
 
 #[derive(Default)]
@@ -42,6 +56,7 @@ pub struct Shared {
     pub usage: Usage,
     pub voice_running: bool,
     pub python_ready: bool,
+    pub translate_status: TranslateStatus,
 }
 
 pub type State = Arc<Mutex<Shared>>;
@@ -56,6 +71,18 @@ fn progress_bar(pos: f64, dur: f64) -> String {
     let k = if dur > 0.0 { ((pos / dur).clamp(0.0, 1.0) * W as f64) as usize } else { 0 };
     let bar: String = (0..W).map(|i| if i < k { '━' } else if i == k { '●' } else { '─' }).collect();
     format!("{} {} {}", fmt_time(pos), bar, fmt_time(dur))
+}
+
+/// Chatbox lines for the current lyric: the lyric (or its romanization in replace mode),
+/// the romanization below it, and the translation prefixed with "» ".
+fn lyric_lines(text: String, roman: Option<String>, translation: Option<String>, replace: bool) -> Vec<String> {
+    let mut out = match roman {
+        Some(r) if replace => vec![r],
+        Some(r) => vec![text, r],
+        None => vec![text],
+    };
+    if let Some(t) = translation { out.push(format!("» {t}")); }
+    out
 }
 
 /// Local clock so we don't depend on how often the OS updates the position.
@@ -126,6 +153,20 @@ fn run(state: State) {
     let mut lyrics_loading = false;
     let mut heard = String::new();
     let mut clock = Clock { key: String::new(), base: 0.0, at: Instant::now(), playing: false };
+
+    // ---- romanization & translation state
+    let (tr_tx, tr_rx) = channel::<translate::Msg>();
+    let mut roman: Vec<Option<String>> = Vec::new(); // aligned with lyrics.lines
+    let mut roman_for = String::new();                // song key `roman` was computed for
+    let mut heard_roman: (String, Option<String>) = (String::new(), None);
+    let mut song_tr = Translations::new();
+    let mut tr_sig = String::new();                   // song key + settings of the last request
+    let mut tr_want = (String::new(), Instant::now()); // debounces settings edits (typing a key)
+    let mut heard_at = Instant::now();                // when the transcribed text last changed
+    let mut heard_req = String::new();                // settings + text of the last heard request
+    let mut heard_tr: (String, Option<String>) = (String::new(), None);
+    let heard_busy = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut quota_logged = false;
 
     let mut last_poll = Instant::now() - Duration::from_secs(10);
     let mut last_list = last_poll;
@@ -214,6 +255,11 @@ fn run(state: State) {
                         lyrics = None;
                         lyrics_for.clear();
                         heard.clear();
+                        roman.clear();
+                        roman_for.clear();
+                        song_tr.clear();
+                        tr_sig.clear();
+                        if cfg.translate { state.lock().unwrap().translate_status = TranslateStatus::Idle; }
                         if let Some(tr) = &transcriber { tr.reset_language(); }
                     }
                     clock.sync(t);
@@ -245,6 +291,80 @@ fn run(state: State) {
             }
         }
 
+        // ---- romanization (offline, once per song)
+        let song_key = track.as_ref().map(|t| t.key()).unwrap_or_default();
+        if cfg.romanize && roman_for != song_key {
+            if let Some(l) = &lyrics {
+                let ctx = romanize::japanese_context(l.lines.iter().map(|x| x.1.as_str()));
+                roman = l.lines.iter().map(|x| romanize::romanize(&x.1, ctx)).collect();
+                roman_for = song_key.clone();
+            }
+        }
+
+        // ---- translation (online, background thread, once per song)
+        let tr_settings = cfg.translate.then(|| translate::Settings::from_cfg(&cfg));
+        match (&tr_settings, &lyrics) {
+            (Some(s), Some(l)) if !song_key.is_empty() => {
+                let sig = format!("{song_key}\n{}", s.signature());
+                if sig != tr_sig {
+                    if tr_want.0 != sig { tr_want = (sig.clone(), Instant::now()); }
+                    // Same song, new settings: wait until they stop changing before calling the service
+                    let settings_edit = tr_sig.split('\n').next() == Some(song_key.as_str());
+                    if !settings_edit || tr_want.1.elapsed() >= Duration::from_millis(800) {
+                        tr_sig = sig.clone();
+                        song_tr.clear();
+                        state.lock().unwrap().translate_status = TranslateStatus::Working;
+                        let lines = l.lines.iter().map(|x| x.1.clone()).collect();
+                        translate::spawn_song(s.clone(), sig, song_key.clone(), lines, tr_tx.clone());
+                    }
+                }
+            }
+            (None, _) if !tr_sig.is_empty() || !heard_req.is_empty() => {
+                tr_sig.clear();
+                heard_req.clear();
+                song_tr.clear();
+                heard_tr = (String::new(), None);
+                state.lock().unwrap().translate_status = TranslateStatus::Idle;
+            }
+            _ => {}
+        }
+        while let Ok(msg) = tr_rx.try_recv() {
+            let (current, result) = match msg {
+                translate::Msg::Song { sig, result } => {
+                    if sig != tr_sig { continue; }
+                    let r = result.map(|o| match o {
+                        translate::Outcome::Done(t) => {
+                            log(format!("[translate] {} lines", t.len()));
+                            song_tr = t;
+                            TranslateStatus::Done
+                        }
+                        translate::Outcome::Same => TranslateStatus::Same,
+                    });
+                    (true, r)
+                }
+                translate::Msg::Heard { text, sig, result } => {
+                    let key = format!("{sig}\n{text}");
+                    let r = result.map(|t| {
+                        let st = if t.is_some() { TranslateStatus::Done } else { TranslateStatus::Same };
+                        heard_tr = (key, t);
+                        st
+                    });
+                    (lyrics.is_none(), r)
+                }
+            };
+            let st = match result {
+                Ok(st) => st,
+                Err(e) => {
+                    if e != translate::Error::Quota || !quota_logged {
+                        log(format!("[translate] {e}"));
+                    }
+                    if e == translate::Error::Quota { quota_logged = true; }
+                    TranslateStatus::Error(e)
+                }
+            };
+            if current { state.lock().unwrap().translate_status = st; }
+        }
+
         // ---- transcription
         let pos = clock.now() + cfg.lyric_offset as f64;
         let no_lyrics = !lyrics_loading && lyrics.is_none();
@@ -269,21 +389,49 @@ fn run(state: State) {
         } else if let Some(t) = transcriber.as_mut() {
             t.stop_capture();
         }
-        while let Ok(t) = text_rx.try_recv() { heard = t; }
+        while let Ok(t) = text_rx.try_recv() { heard = t; heard_at = Instant::now(); }
+
+        // ---- romanization & translation of the transcribed text
+        if cfg.romanize && heard_roman.0 != heard {
+            let r = romanize::romanize(&heard, romanize::japanese_context([heard.as_str()]));
+            heard_roman = (heard.clone(), r);
+        }
+        let heard_key = tr_settings.as_ref().map(|s| format!("{}\n{heard}", s.signature())).unwrap_or_default();
+        if let Some(s) = &tr_settings {
+            // debounced: wait until the text settles, one request at a time
+            if lyrics.is_none() && !heard.is_empty() && heard_req != heard_key
+                && heard_at.elapsed() >= Duration::from_millis(800)
+                && !heard_busy.load(std::sync::atomic::Ordering::Relaxed) {
+                heard_req = heard_key.clone();
+                state.lock().unwrap().translate_status = TranslateStatus::Working;
+                translate::spawn_text(s.clone(), s.signature(), heard.clone(), tr_tx.clone(), heard_busy.clone());
+            }
+        }
 
         // ---- compose
-        let line = |i: usize| lyrics.as_ref().and_then(|l| l.lines.get(i)).map(|x| x.1.clone());
+        let text_of = |i: usize| lyrics.as_ref().and_then(|l| l.lines.get(i)).map(|x| x.1.clone());
+        let roman_of = |i: usize| if cfg.romanize { roman.get(i).cloned().flatten() } else { None };
+        let tr_of = |i: usize| if cfg.translate { text_of(i).and_then(|s| song_tr.get(s.trim()).cloned()) } else { None };
+        // current line as (lyric, romanization, translation) + index of the next line
         let (cur, next) = match (&lyrics, &track) {
             (Some(l), _) if l.synced => match l.index_at(pos) {
-                Some(i) => (Some(line(i).filter(|s| !s.is_empty()).unwrap_or("♪ ♪ ♪".into())), line(i + 1)),
-                None => (None, line(0)),
+                Some(i) => (Some(match text_of(i).filter(|s| !s.is_empty()) {
+                    Some(s) => (s, roman_of(i), tr_of(i)),
+                    None => ("♪ ♪ ♪".to_string(), None, None),
+                }), Some(i + 1)),
+                None => (None, Some(0)),
             },
             (Some(l), Some(t)) if t.duration > 0.0 => {
-                let i = ((pos / t.duration) * l.lines.len() as f64) as usize;
-                (line(i.min(l.lines.len().saturating_sub(1))), None)
+                let i = (((pos / t.duration) * l.lines.len() as f64) as usize).min(l.lines.len().saturating_sub(1));
+                (text_of(i).map(|s| (s, roman_of(i), tr_of(i))), None)
             }
-            _ => (if heard.is_empty() { None } else { Some(heard.clone()) }, None),
+            _ => (if heard.is_empty() { None } else {
+                let r = if cfg.romanize && heard_roman.0 == heard { heard_roman.1.clone() } else { None };
+                let tr = if cfg.translate && heard_tr.0 == heard_key { heard_tr.1.clone() } else { None };
+                Some((heard.clone(), r, tr))
+            }, None),
         };
+        let replace = cfg.romanize_mode == "replace";
         let mut lines: Vec<String> = Vec::new();
         if let Some(t) = &track {
             if cfg.show_title {
@@ -295,7 +443,10 @@ fn run(state: State) {
                 lines.push(progress_bar(clock.now(), t.duration));
             }
         }
-        if let Some(c) = &cur { lines.push(c.clone()); }
+        if let Some((text, rom, tr)) = cur {
+            lines.extend(lyric_lines(text, rom, tr, replace));
+        }
+        let next = next.and_then(|i| { let s = text_of(i)?; Some(if replace { roman_of(i).unwrap_or(s) } else { s }) });
         if cfg.show_next_line { if let Some(n) = next.filter(|n| !n.is_empty()) { lines.push(format!("↳ {n}")); } }
         let osc_text = truncate_chars(&lines.join("\n"), 144);
         // Axis relays to the VRChat chatbox: send it exactly the chatbox text (same options, 144 chars)
@@ -347,5 +498,17 @@ fn run(state: State) {
         g.chatbox = osc_text;
         g.voice_running = transcriber.is_some();
         if let Some(u) = usage { g.usage = u; }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::lyric_lines;
+    #[test]
+    fn compose_lyric() {
+        let (l, r, t) = ("夜に駆ける".to_string(), Some("yoru ni kakeru".to_string()), Some("Racing into the night".to_string()));
+        assert_eq!(lyric_lines(l.clone(), r.clone(), t.clone(), false), ["夜に駆ける", "yoru ni kakeru", "» Racing into the night"]);
+        assert_eq!(lyric_lines(l.clone(), r, None, true), ["yoru ni kakeru"]);
+        assert_eq!(lyric_lines(l, None, t, true), ["夜に駆ける", "» Racing into the night"]);
     }
 }

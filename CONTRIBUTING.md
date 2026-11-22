@@ -24,7 +24,7 @@ powershell -ExecutionPolicy Bypass -File scripts/setup_voice.ps1 -InstallDir .  
 ./scripts/setup_voice.sh .                                                       # Linux
 ```
 
-`LYRICSOSC_TAB=about|voice|chatbox|monitor|log` opens the app on a given tab (handy for screenshots).
+`LYRICSOSC_TAB=about|voice|chatbox|translate|monitor|log` opens the app on a given tab (handy for screenshots).
 
 ## Project layout
 
@@ -35,6 +35,8 @@ powershell -ExecutionPolicy Bypass -File scripts/setup_voice.ps1 -InstallDir .  
 | `src/media/` | Now playing: `windows.rs` (SMTC), `linux.rs` (MPRIS) |
 | `src/audio/` | Audio capture: `windows.rs` (WASAPI, per app), `linux.rs` (PulseAudio/PipeWire) |
 | `src/lyrics.rs` | LRCLIB lookup, LRC parsing, title cleanup |
+| `src/romanize.rs` | Offline romanization: romaji, pinyin, Korean, Cyrillic |
+| `src/translate.rs` | Lyric translation (MyMemory, DeepL, LibreTranslate) with disk cache |
 | `src/whisper.rs` | Starts and talks to the Python voice process |
 | `src/osc.rs` / `src/axis.rs` | VRChat chatbox (OSC) and Axis addon output |
 | `src/monitor.rs` | CPU / RAM / VRAM monitor |
