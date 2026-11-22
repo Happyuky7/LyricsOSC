@@ -199,7 +199,7 @@ impl eframe::App for Gui {
             ui.horizontal(|ui| {
                 for (tab, key) in [(Tab::Main, "tab_main"), (Tab::Chatbox, "tab_chatbox"), (Tab::Voice, "tab_voice"),
                                    (Tab::Monitor, "tab_monitor"), (Tab::Log, "tab_log"), (Tab::About, "tab_about")] {
-                    let has_update = tab == Tab::About && matches!(*self.update.lock().unwrap(), update::Status::Available(_));
+                    let has_update = tab == Tab::About && matches!(*self.update.lock().unwrap(), update::Status::Available(_) | update::Status::Ready { .. });
                     let label = if has_update { format!("{} ●", t(key)) } else { t(key) };
                     ui.selectable_value(&mut self.tab, tab, label);
                 }
@@ -395,24 +395,59 @@ impl Gui {
         ui.separator();
         ui.heading(t("updates"));
         let status = self.update.lock().unwrap().clone();
+        let busy = matches!(status, update::Status::Checking | update::Status::Downloading { .. } | update::Status::Installing);
         ui.horizontal(|ui| {
-            let checking = status == update::Status::Checking;
-            if ui.add_enabled(!checking, egui::Button::new(t("check_updates"))).clicked() {
-                update::check(self.update.clone());
+            if ui.add_enabled(!busy, egui::Button::new(t("check_updates"))).clicked() {
+                update::check(self.update.clone(), self.cfg.update_auto_download);
             }
             match &status {
                 update::Status::Checking => { ui.spinner(); ui.label(t("checking")); }
                 update::Status::UpToDate => { ui.colored_label(egui::Color32::from_rgb(120, 220, 140), t("up_to_date")); }
-                update::Status::Available(v) => {
-                    ui.colored_label(egui::Color32::from_rgb(255, 190, 90), t("update_available").replace("{version}", v));
+                update::Status::Available(r) => {
+                    ui.colored_label(egui::Color32::from_rgb(255, 190, 90), t("update_available").replace("{version}", &r.version));
                 }
-                update::Status::Failed => { ui.colored_label(egui::Color32::from_rgb(255, 140, 140), t("update_failed")); }
+                update::Status::Downloading { release, .. } => {
+                    ui.spinner();
+                    ui.label(t("update_downloading").replace("{version}", &release.version));
+                }
+                update::Status::Ready { release, .. } => {
+                    ui.colored_label(egui::Color32::from_rgb(120, 220, 140), t("update_ready").replace("{version}", &release.version));
+                }
+                update::Status::Installing => { ui.spinner(); ui.label(t("update_installing")); }
+                update::Status::Failed(e) => {
+                    let msg = e.strip_prefix('@').map(t).unwrap_or_else(|| e.clone());
+                    ui.colored_label(egui::Color32::from_rgb(255, 140, 140), format!("{}: {msg}", t("update_error")));
+                }
                 update::Status::Idle => {}
             }
         });
-        if let update::Status::Available(_) = status {
-            ui.hyperlink_to(t("download_update"), format!("{}/download", update::WEBSITE));
+        match &status {
+            update::Status::Available(r) => {
+                ui.horizontal(|ui| {
+                    let size = if r.size > 0 { format!(" ({})", mb(r.size as f64 / 1_048_576.0)) } else { String::new() };
+                    if ui.add(egui::Button::new(format!("⬇ {}{size}", t("update_download_install"))).fill(ACCENT.gamma_multiply(0.7))).clicked() {
+                        update::download(self.update.clone());
+                    }
+                    ui.hyperlink_to(t("update_whats_new"), &r.notes_url);
+                });
+            }
+            update::Status::Downloading { done, total, .. } => {
+                let frac = if *total > 0 { *done as f32 / *total as f32 } else { 0.0 };
+                ui.add(egui::ProgressBar::new(frac).show_percentage().desired_width(360.0).fill(ACCENT.gamma_multiply(0.8)));
+                ui.label(egui::RichText::new(format!("{} / {}", mb(*done as f64 / 1_048_576.0), mb(*total as f64 / 1_048_576.0))).small().weak());
+            }
+            update::Status::Ready { .. } => {
+                if ui.add(egui::Button::new(format!("⟳ {}", t("update_restart"))).fill(ACCENT.gamma_multiply(0.7))).clicked() {
+                    if let Err(e) = update::apply(&self.update) {
+                        *self.update.lock().unwrap() = update::Status::Failed(e);
+                    }
+                }
+                ui.label(egui::RichText::new(t("update_restart_hint")).small().weak());
+            }
+            _ => {}
         }
+        ui.checkbox(&mut self.cfg.update_check_on_start, t("update_check_on_start"));
+        ui.checkbox(&mut self.cfg.update_auto_download, t("update_auto_download"));
 
         // ---- links
         ui.add_space(12.0);
@@ -610,10 +645,10 @@ fn main() -> eframe::Result<()> {
             cc.egui_ctx.load_texture("banner", egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba),
                                      egui::TextureOptions::LINEAR)
         });
-        Ok(Box::new(Gui { state, saved: cfg.clone(), cfg, saved_at: None, confirm_reset: false, tab: start_tab(), logo, banner, update: {
-            let u = update::Shared::default();
-            update::check(u.clone()); // one silent check at startup
-            u
-        } }))
+        let update = update::Shared::default();
+        if cfg.update_check_on_start {
+            update::check(update.clone(), cfg.update_auto_download);
+        }
+        Ok(Box::new(Gui { state, saved: cfg.clone(), cfg, saved_at: None, confirm_reset: false, tab: start_tab(), logo, banner, update }))
     }))
 }

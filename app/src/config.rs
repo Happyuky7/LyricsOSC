@@ -57,6 +57,12 @@ pub struct Config {
     pub vad: bool,
     pub languages: Vec<String>,
     pub chunk_seconds: f32,
+
+    // --- updates
+    /// Look for a new version when the app starts
+    pub update_check_on_start: bool,
+    /// Download new versions in the background (installing always needs a click)
+    pub update_auto_download: bool,
 }
 
 impl Default for Config {
@@ -90,6 +96,8 @@ impl Default for Config {
             vad: false,
             languages: vec!["zh".into(), "en".into(), "es".into(), "ja".into(), "ko".into()],
             chunk_seconds: 5.0,
+            update_check_on_start: true,
+            update_auto_download: false,
         }
     }
 }

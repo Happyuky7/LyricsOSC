@@ -65,14 +65,17 @@ Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\LyricsOSC.exe"; Tasks: desktopicon
 
 [Run]
-; Automatic voice-engine setup (visible console so the user sees progress)
+; Automatic voice-engine setup (visible console so the user sees progress).
+; Skipped when the app updates itself (/UPDATE): the voice engine is already installed.
 Filename: "powershell.exe"; \
   Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\setup_voice.ps1"" -InstallDir ""{app}"""; \
-  StatusMsg: "Installing the voice engine (Python + Whisper)…"; Tasks: voice and not voice\nogpu; Flags: waituntilterminated
+  StatusMsg: "Installing the voice engine (Python + Whisper)…"; Tasks: voice and not voice\nogpu; Flags: waituntilterminated; Check: NeedsVoiceSetup
 Filename: "powershell.exe"; \
   Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\setup_voice.ps1"" -InstallDir ""{app}"" -NoGpu"; \
-  StatusMsg: "Installing the voice engine (Python + Whisper)…"; Tasks: voice\nogpu; Flags: waituntilterminated
+  StatusMsg: "Installing the voice engine (Python + Whisper)…"; Tasks: voice\nogpu; Flags: waituntilterminated; Check: NeedsVoiceSetup
 Filename: "{app}\LyricsOSC.exe"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+; After a self-update (/UPDATE, run silently by the app) open LyricsOSC again
+Filename: "{app}\LyricsOSC.exe"; WorkingDir: "{app}"; Flags: nowait; Check: IsUpdate
 
 [UninstallDelete]
 ; Everything the setup script downloaded into the install folder
@@ -84,3 +87,21 @@ Type: filesandordirs; Name: "{app}\tools"
 Type: filesandordirs; Name: "{app}\cache"
 Type: files; Name: "{app}\config.json"
 Type: files; Name: "{app}\lyricsosc.log"
+
+[Code]
+// /UPDATE is passed by LyricsOSC when it installs a downloaded update of itself.
+function IsUpdate(): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), '/UPDATE') = 0 then
+      Result := True;
+end;
+
+// Voice engine: set it up on a normal install, or on an update if it's missing.
+function NeedsVoiceSetup(): Boolean;
+begin
+  Result := (not IsUpdate()) or (not FileExists(ExpandConstant('{app}\python\.venv\Scripts\python.exe')));
+end;
