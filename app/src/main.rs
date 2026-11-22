@@ -545,6 +545,11 @@ impl Gui {
             }
             update::Status::Ready { .. } => {
                 if ui.add(egui::Button::new(format!("⟳ {}", t("update_restart"))).fill(ACCENT.gamma_multiply(0.7))).clicked() {
+                    // the app closes to update: keep settings changed but not saved yet
+                    if serde_json::to_string(&self.cfg).ok() != serde_json::to_string(&self.saved).ok() {
+                        self.cfg.save();
+                        self.saved = self.cfg.clone();
+                    }
                     if let Err(e) = update::apply(&self.update) {
                         *self.update.lock().unwrap() = update::Status::Failed(e);
                     }
