@@ -6,6 +6,7 @@ Protocol:
   stdout : one JSON line per event
            {"ready": true, "device": "cuda:0"}
            {"text": "...", "lang": "es"}
+           {"info": "language: ja"}
            {"error": "..."}
 
 Usage: python whisper_sidecar.py --model small --device auto --languages zh,en,es
@@ -42,6 +43,60 @@ def is_hallucination(text):
         return True
     words = t.split()
     return len(words) >= 6 and len(set(words)) <= 2      # "la la la la la la"
+
+
+class LanguageVote:
+    """Chooses the song's language from several chunks instead of trusting a single one.
+
+    Whisper's language detection is unreliable on short chunks of singing over music. If a wrong
+    language is locked, Whisper *translates* into it (Japanese song -> English text), so:
+    - while unlocked, each chunk votes for its most likely allowed language;
+    - a language is locked after NEED votes, when its total score is at least twice the runner-up's;
+    - while locked, some chunks are re-checked; two clear disagreements in a row unlock it again.
+    """
+
+    NEED = 3        # votes before locking
+    MIN_PROB = 0.15  # below this the chunk is instrumental or in a language that is not allowed
+    SURE = 0.5      # a chunk this sure may be transcribed before the language is locked
+
+    def __init__(self, langs):
+        self.langs = langs
+        self.reset()
+
+    def reset(self):
+        self.locked = None
+        self.score = {}
+        self.votes = {}
+        self.strikes = 0
+
+    def _best(self, probs):
+        allowed = sorted(((probs.get(l, 0.0), l) for l in self.langs), reverse=True)
+        return allowed[0] if allowed else (0.0, None)
+
+    def feed(self, probs):
+        """Unlocked: count this chunk's vote. Returns the language to transcribe it with, or None to skip it."""
+        p, lang = self._best(probs)
+        if lang is None or p < self.MIN_PROB:
+            return None
+        self.score[lang] = self.score.get(lang, 0.0) + p
+        self.votes[lang] = self.votes.get(lang, 0) + 1
+        others = max((v for k, v in self.score.items() if k != lang), default=0.0)
+        if self.votes[lang] >= self.NEED and self.score[lang] >= 2 * others:
+            self.locked = lang
+            return lang
+        return lang if p >= self.SURE else None
+
+    def check(self, probs):
+        """Locked: re-check with a new chunk. Unlocks after two clear disagreements in a row."""
+        p, lang = self._best(probs)
+        if lang != self.locked and p >= 0.6 and probs.get(self.locked, 0.0) < 0.15:
+            self.strikes += 1
+            if self.strikes >= 2:
+                self.reset()
+                return True
+        else:
+            self.strikes = 0
+        return False
 
 
 def read_exact(stream, n):
@@ -109,34 +164,57 @@ def main():
     emit(ready=True, device=f"{dev}:{args.gpu}" if dev == "cuda" else dev)
 
     stdin = sys.stdin.buffer
-    locked = None          # language locked once detected with confidence
+    vote = LanguageVote(langs)
+    chunk = 0
     while True:
         head = read_exact(stdin, 4)
         if head is None:
             return 0
         (n,) = struct.unpack("<I", head)
-        if n == 0:         # reset (new song): detect the language again
-            locked = None
+        if n == 0:         # reset (new song): choose the language again
+            vote.reset()
             continue
         data = read_exact(stdin, n * 4)
         if data is None:
             return 0
         audio = np.frombuffer(data, dtype=np.float32)
+        chunk += 1
 
-        def run():
-            segs, inf = model.transcribe(
-                audio, language=locked, beam_size=max(1, args.beam),
+        def detect():
+            # language probabilities of this chunk, e.g. {"ja": 0.71, "en": 0.12, ...}
+            _, _, probs = model.detect_language(audio)
+            return dict(probs)
+
+        def transcribe(lang):
+            segs, _ = model.transcribe(
+                audio, language=lang, beam_size=max(1, args.beam),
                 # No VAD by default: singing over music doesn't look like "speech" to the VAD and would be lost.
                 # Silence/instrumentals are filtered with no_speech_prob and is_hallucination.
                 vad_filter=args.vad,
                 vad_parameters={"threshold": 0.2} if args.vad else None,
                 condition_on_previous_text=False,
-                initial_prompt="以下是普通话的歌词。" if locked == "zh" else None,
+                initial_prompt="以下是普通话的歌词。" if lang == "zh" else None,
             )
-            return list(segs), inf
+            return list(segs)
+
+        def run():
+            # detection costs one extra encoder pass: every chunk until locked, then every 3rd
+            lang = vote.locked
+            if vote.locked is None or chunk % 3 == 0:
+                probs = detect()
+                if vote.locked is not None and vote.check(probs):
+                    emit(info="language changed: detecting again")
+                if vote.locked is None:
+                    lang = vote.feed(probs)
+                    if lang is None:
+                        return None, None
+                    if vote.locked:
+                        emit(info=f"language: {vote.locked}")
+            lang = vote.locked or lang
+            return transcribe(lang), lang
 
         try:
-            segments, info = run()
+            segments, lang = run()
         except Exception as e:
             msg = str(e).lower()
             if dev == "cuda" and any(k in msg for k in ("cublas", "cudnn", "cuda")):
@@ -144,22 +222,18 @@ def main():
                 model, dev = load_model(args.model, "cpu", 0, "int8")
                 emit(ready=True, device="cpu (CUDA libraries missing)")
                 try:
-                    segments, info = run()
+                    segments, lang = run()
                 except Exception as e2:
                     emit(error=str(e2))
                     continue
             else:
                 emit(error=str(e))
                 continue
-        if locked is None:
-            if info.language not in langs:
-                continue   # unsupported language / instrumental
-            if info.language_probability > 0.6:
-                locked = info.language
+        if not segments:
+            continue       # instrumental, or a language that is not allowed
         text = " ".join(s.text.strip() for s in segments if s.no_speech_prob < 0.6).strip()
         if text and not is_hallucination(text):
-            emit(text=text, lang=info.language)
-
+            emit(text=text, lang=lang)
 
 if __name__ == "__main__":
     sys.exit(main() or 0)

@@ -204,6 +204,8 @@ impl Transcriber {
                 } else if v.get("ready").is_some() {
                     let dev = v.get("device").and_then(|d| d.as_str()).unwrap_or("?");
                     let _ = log2.send(format!("[voice] Whisper ready ({dev})"));
+                } else if let Some(i) = v.get("info").and_then(|i| i.as_str()) {
+                    let _ = log2.send(format!("[voice] {i}"));
                 } else if let Some(e) = v.get("error").and_then(|e| e.as_str()) {
                     let _ = log2.send(format!("[voice] {e}"));
                 }
